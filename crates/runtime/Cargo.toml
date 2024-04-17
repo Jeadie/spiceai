@@ -11,6 +11,7 @@ description = "The spiced runtime"
 [dependencies]
 snafu.workspace = true
 spicepod = { path = "../spicepod" }
+spiceraft = { path = "../spiceraft" }
 app = { path = "../app" }
 axum = { version = "0.7.4", features = ["macros"] }
 tokio.workspace = true

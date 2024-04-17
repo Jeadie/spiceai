@@ -44,4 +44,13 @@ pub struct Config {
         action
     )]
     pub open_telemetry_bind_address: SocketAddr,
+
+    /// Configure spiceraft.
+    #[arg(
+        long = "spice_raft",
+        value_name = "SPICE_RAFT_BIND_ADDRESS",
+        default_value = "127.0.0.1:50053",
+        action
+    )]
+    pub spice_raft_bind_address: SocketAddr,
 }

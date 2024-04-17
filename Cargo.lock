@@ -6139,6 +6139,7 @@ dependencies = [
  "serde_yaml",
  "snafu 0.8.2",
  "spicepod",
+ "spiceraft",
  "sql_provider_datafusion",
  "tokio",
  "tokio-rusqlite",
@@ -6995,6 +6996,16 @@ dependencies = [
  "serde_yaml",
  "snafu 0.8.2",
  "tracing",
+]
+
+[[package]]
+name = "spiceraft"
+version = "0.11.1-alpha"
+dependencies = [
+ "prost 0.12.4",
+ "snafu 0.8.2",
+ "tonic 0.11.0",
+ "tonic-build",
 ]
 
 [[package]]

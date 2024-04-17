@@ -18,7 +18,8 @@ limitations under the License.
 
 use std::borrow::Borrow;
 use std::collections::HashSet;
-use std::net::SocketAddr;
+use std::env;
+use std::net::{SocketAddr, ToSocketAddrs};
 use std::{collections::HashMap, sync::Arc};
 
 use ::datafusion::sql::parser::{self, DFParser};
@@ -68,6 +69,9 @@ pub enum Error {
 
     #[snafu(display("Unable to start OpenTelemetry server: {source}"))]
     UnableToStartOpenTelemetryServer { source: opentelemetry::Error },
+
+    #[snafu(display("Unable to start spiceraft: {source}"))]
+    UnableToStartSpiceRaft { source: spiceraft::Error },
 
     #[snafu(display("Unknown data source: {data_source}"))]
     UnknownDataSource { data_source: String },
@@ -495,17 +499,26 @@ impl Runtime {
             self.config.clone().into(),
             with_metrics,
         );
-
         let flight_server_future = flight::start(self.config.flight_bind_address, self.df.clone());
         let open_telemetry_server_future =
             opentelemetry::start(self.config.open_telemetry_bind_address, self.df.clone());
+        
+        let spicepod_overwrite_path: String = match env::current_dir() {
+            Ok(path) => path.join("spicepod.yaml").to_string_lossy().to_string(),
+            Err(e) => {
+                tracing::error!("Unable to get current directory: {}", e);
+                "spicepod.yaml".to_string()
+            }
+        };
+        let raft_server = spiceraft::start_consensus(self.config.spice_raft_bind_address, spicepod_overwrite_path);
+        
         let pods_watcher_future = self.start_pods_watcher();
-
         tokio::select! {
             http_res = http_server_future => http_res.context(UnableToStartHttpServerSnafu),
             flight_res = flight_server_future => flight_res.context(UnableToStartFlightServerSnafu),
             open_telemetry_res = open_telemetry_server_future => open_telemetry_res.context(UnableToStartOpenTelemetryServerSnafu),
             pods_watcher_res = pods_watcher_future => pods_watcher_res.context(UnableToInitializePodsWatcherSnafu),
+            raft_server_res = raft_server => raft_server_res.context(UnableToStartSpiceRaftSnafu),
             () = shutdown_signal() => {
                 tracing::info!("Goodbye!");
                 Ok(())
