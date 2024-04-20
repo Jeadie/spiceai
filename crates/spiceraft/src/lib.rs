@@ -1,4 +1,5 @@
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::{Arc, RwLock}};
+use consensus::ConsensusServer;
 use snafu::prelude::*;
 
 use raft::raft_service_server::RaftServiceServer;
@@ -16,10 +17,10 @@ pub enum Error {
 
 type Result<T, E = Error> = std::result::Result<T, E>;
 
-pub async fn start_consensus(addr: SocketAddr, spice_file: String) -> Result<()>{
-    let svc = consensus::ConsensusModule::new(spice_file);
+pub async fn start_consensus(addr: SocketAddr, spice_file: String, peers: Vec<SocketAddr>) -> Result<()>{
+    let module = consensus::ConsensusModule::new(spice_file, peers);
     tonic::transport::Server::builder()
-        .add_service(RaftServiceServer::new(svc))
+        .add_service(RaftServiceServer::new(ConsensusServer{ module: Arc::new(RwLock::new(module)) }))
         .serve(addr)
         .await
         .context(UnableToStartConsensusSnafu)
