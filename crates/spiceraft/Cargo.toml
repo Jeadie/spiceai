@@ -11,7 +11,9 @@ exclude.workspace = true
 [dependencies]
 tonic.workspace = true
 snafu.workspace = true
+tracing.workspace = true
 prost = { version = "0.12.1" }
+rand = "0.8.5"
 
 [build-dependencies]
 tonic-build = "0.11.0"

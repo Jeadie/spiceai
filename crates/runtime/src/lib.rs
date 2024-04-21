@@ -510,7 +510,11 @@ impl Runtime {
                 "spicepod.yaml".to_string()
             }
         };
-        let raft_server = spiceraft::start_consensus(self.config.spice_raft_bind_address, spicepod_overwrite_path);
+        let raft_server = spiceraft::start_consensus(
+            self.config.spice_raft_bind_address,
+             spicepod_overwrite_path,
+             self.config.spice_raft_peers.clone(),
+        );
         
         let pods_watcher_future = self.start_pods_watcher();
         tokio::select! {

@@ -1,6 +1,6 @@
-use std::{borrow::BorrowMut, net::SocketAddr, sync::{Arc, RwLock}};
+use std::{cmp::min, net::SocketAddr, sync::{Arc, RwLock}};
 
-use crate::raft::{raft_service_server::RaftService, AppendEntryRequest, AppendEntryResponse, ClientRequestMessage, ClientRequestResponse, HeartbeatMessage, HeartbeatResponse, LogEntry, RequestVoteRequest, RequestVoteResponse};
+use crate::{election_timer::ElectionTimer, raft::{raft_service_server::RaftService, AppendEntryRequest, AppendEntryResponse, ClientRequestMessage, ClientRequestResponse, LogEntry, RequestVoteRequest, RequestVoteResponse}};
 
 use snafu::prelude::*;
 use tonic::{async_trait, Request, Response, Status};
@@ -13,6 +13,7 @@ pub struct LeaderState {
 pub struct LocalState {
     commit_index: u64,
     last_applied: u64,
+    pub election_timer: ElectionTimer
 }
 
 // State that should be persisted before responding to RPC requests.
@@ -43,6 +44,10 @@ pub struct ConsensusModule {
 pub enum Error {
     #[snafu(display("Unable to write to consensus state"))]
     UnableToUpdateNode,
+
+    #[snafu(display("Failed to run candidate reelection"))]
+    UnableToRunCandidateReelection,
+
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
@@ -72,7 +77,8 @@ impl ConsensusModule {
             },
             local_state: LocalState {
                 commit_index: 0,
-                last_applied: 0
+                last_applied: 0,
+                election_timer: ElectionTimer::default(),
             },
             spicepod_file,
             peers
@@ -90,13 +96,68 @@ impl ConsensusModule {
     pub fn is_correct_candidate(&self,  candidate_id: u64) -> bool {
         self.state.voted_for.is_none() || self.state.voted_for == Some(candidate_id)
     }
+
+    pub fn run_reelection(&self) -> Result<()> {
+        return Ok(())
+    }
 }
 
 #[async_trait]
 impl RaftService for ConsensusServer {
     async fn append_entry(self: Arc<Self>, request: Request<AppendEntryRequest>) -> Result<Response<AppendEntryResponse>, Status> {
-        println!("Received append entry request: {:?}", request);
-        todo!()
+        let AppendEntryRequest{term, leader_ids, prev_log_index, prev_log_term, entries, leader_commit} = request.get_ref();
+        
+        match self.module.read() {
+            Err(_) => {
+                return Err(Status::internal("Unable to read module state"));
+            }
+            Ok(module) => {
+                // Reply false if term < currentTerm (§5.1)
+                if module.state.current_term > *term {
+                    return Ok(Response::new(AppendEntryResponse {
+                        term: module.state.current_term,
+                        success: false
+                    }));
+                }
+
+                //  Reply false if log doesn’t contain an entry at prevLogIndex whose term matches prevLogTerm (§5.3)
+                if (module.state.log.len() as u64) < *prev_log_index || module.state.log[*prev_log_index as usize].term != *prev_log_term {
+                    // TODO: Also need to delete
+
+                    return Ok(Response::new(AppendEntryResponse {
+                        term: module.state.current_term,
+                        success: false
+                    }));
+                }
+            },
+        };
+
+        match self.module.write() {
+            Err(_) => {
+                Err(Status::internal("Unable to write log entries"))
+            }
+            Ok(mut write_module) => {
+                for i in 0..entries.len() {
+                    let idx = (*prev_log_index as usize) + 1 + i;
+                    write_module.state.log[idx] = LogEntry{
+                        term: *term,
+                        command: entries[i].command.clone()
+                    }
+                }
+                write_module.state.current_term = *term;
+        
+                // If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry)
+                write_module.local_state.commit_index = min(
+                    min(write_module.local_state.commit_index, *leader_commit),
+                    (write_module.state.log.len()-1) as u64
+                );
+        
+                Ok(Response::new(AppendEntryResponse {
+                    term: write_module.state.current_term,
+                    success: false
+                }))
+            }
+        }
     }
 
     async fn request_vote(self: Arc<Self>, request: tonic::Request<RequestVoteRequest>) -> Result<Response<RequestVoteResponse>, Status> {

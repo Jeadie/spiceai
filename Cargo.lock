@@ -7003,9 +7003,11 @@ name = "spiceraft"
 version = "0.11.1-alpha"
 dependencies = [
  "prost 0.12.4",
+ "rand",
  "snafu 0.8.2",
  "tonic 0.11.0",
  "tonic-build",
+ "tracing",
 ]
 
 [[package]]

@@ -53,4 +53,12 @@ pub struct Config {
         action
     )]
     pub spice_raft_bind_address: SocketAddr,
+
+    #[arg(
+        long = "spice_raft",
+        value_name = "SPICE_RAFT_PEERS",
+        default_value = "",
+        action
+    )]
+    pub spice_raft_peers: Vec<SocketAddr>,
 }
